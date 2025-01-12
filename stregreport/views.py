@@ -16,6 +16,8 @@ from stregreport.forms import CategoryReportForm
 from stregsystem.models import Category, Member, Product, Sale
 from stregreport.models import BreadRazzia, RazziaEntryOld
 from stregsystem.templatetags.stregsystem_extras import money
+from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 
 
 @permission_required("stregsystem.access_sales_reports")
@@ -545,3 +547,27 @@ def user_purchases_in_categories(request):
             "header": header,
         },
     )
+
+
+@permission_required("stregsystem.access_sales_reports")
+def refund_sale(request, sale_id):
+    if request.method != 'POST':
+        raise PermissionDenied
+        
+    sale = get_object_or_404(Sale, pk=sale_id)
+    
+    # Create a negative sale (refund)
+    refund = Sale.objects.create(
+        member=sale.member,
+        product=sale.product,
+        price=-sale.price,  # Negative price for refund
+        timestamp=timezone.now()
+    )
+    
+    messages.success(request, f'Refunded {sale.product.name} ({money(sale.price)}) to {sale.member.username}')
+    
+    # Redirect back to the page they came from, or daily report as fallback
+    return redirect(request.META.get('HTTP_REFERER', reverse('daily')))
+
+
+refund_sale = staff_member_required(refund_sale)
